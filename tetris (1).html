@@ -1,0 +1,511 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Tetris</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+            background-color: #f3f4f6;
+            margin: 0;
+            padding: 20px;
+        }
+        
+        h1 {
+            font-size: 2.5rem;
+            font-weight: bold;
+            margin-bottom: 1rem;
+        }
+        
+        .game-container {
+            background-color: white;
+            padding: 1rem;
+            border-radius: 0.5rem;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        }
+        
+        .board {
+            display: grid;
+            grid-template-columns: repeat(10, 1fr);
+            width: 200px;
+            height: 400px;
+            background-color: #d1d5db;
+            border: 1px solid #e5e7eb;
+        }
+        
+        .cell {
+            width: 20px;
+            height: 20px;
+            border: 1px solid #e5e7eb;
+            background-color: #f3f4f6;
+        }
+        
+        .cell.filled {
+            background-color: #3b82f6;
+        }
+        
+        .cell.cyan { background-color: #06b6d4; }
+        .cell.blue { background-color: #3b82f6; }
+        .cell.orange { background-color: #f97316; }
+        .cell.yellow { background-color: #facc15; }
+        .cell.green { background-color: #22c55e; }
+        .cell.purple { background-color: #a855f7; }
+        .cell.red { background-color: #ef4444; }
+        
+        .info {
+            margin-top: 1rem;
+            text-align: center;
+        }
+        
+        .score {
+            font-size: 1.25rem;
+            font-weight: bold;
+            margin-bottom: 0.5rem;
+        }
+        
+        .level {
+            font-size: 1.125rem;
+            margin-bottom: 0.5rem;
+        }
+        
+        .controls {
+            font-size: 0.875rem;
+            color: #4b5563;
+            margin-bottom: 1rem;
+        }
+        
+        .game-over {
+            font-size: 1.5rem;
+            font-weight: bold;
+            color: #dc2626;
+            margin: 1rem 0;
+            display: none;
+        }
+        
+        .buttons {
+            display: flex;
+            gap: 1rem;
+            margin-top: 1rem;
+        }
+        
+        button {
+            padding: 0.5rem 1rem;
+            background-color: #3b82f6;
+            color: white;
+            border: none;
+            border-radius: 0.25rem;
+            font-weight: 500;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+        }
+        
+        button:hover {
+            background-color: #2563eb;
+        }
+        
+        .music-icon {
+            margin-right: 0.5rem;
+            width: 1rem;
+            height: 1rem;
+        }
+    </style>
+</head>
+<body>
+    <h1>Tetris</h1>
+    
+    <div class="game-container">
+        <div class="board" id="board"></div>
+    </div>
+    
+    <div class="info">
+        <div class="score" id="score">Score: 0</div>
+        <div class="level" id="level">Level: 1</div>
+        <div class="controls">Press Up Arrow to rotate the block</div>
+        <div class="game-over" id="game-over">Game Over!</div>
+    </div>
+    
+    <div class="buttons">
+        <button id="reset-button">Reset Game</button>
+        <button id="music-button">
+            <svg class="music-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M9 18V5l12-2v13"></path>
+                <circle cx="6" cy="18" r="3"></circle>
+                <circle cx="18" cy="16" r="3"></circle>
+            </svg>
+            Play Music
+        </button>
+    </div>
+    
+    <audio id="tetris-music" src="https://hebbkx1anhila5yf.public.blob.vercel-storage.com/Tetris-kxnh5j7hpNEcFspAndlU2huV5n6dvk.mp3" loop></audio>
+    
+    <script>
+        // Constants
+        const BOARD_WIDTH = 10;
+        const BOARD_HEIGHT = 20;
+        const INITIAL_DROP_TIME = 800;
+        const SPEED_INCREASE_FACTOR = 0.95;
+        
+        // Tetrominos
+        const TETROMINOS = {
+            I: { shape: [[1, 1, 1, 1]], color: 'cyan' },
+            J: { shape: [[1, 0, 0], [1, 1, 1]], color: 'blue' },
+            L: { shape: [[0, 0, 1], [1, 1, 1]], color: 'orange' },
+            O: { shape: [[1, 1], [1, 1]], color: 'yellow' },
+            S: { shape: [[0, 1, 1], [1, 1, 0]], color: 'green' },
+            T: { shape: [[0, 1, 0], [1, 1, 1]], color: 'purple' },
+            Z: { shape: [[1, 1, 0], [0, 1, 1]], color: 'red' }
+        };
+        
+        // Game state
+        let board = [];
+        let currentPiece = null;
+        let score = 0;
+        let gameOver = false;
+        let dropTime = INITIAL_DROP_TIME;
+        let level = 1;
+        let isMusicPlaying = false;
+        let completedRows = [];
+        let dropInterval = null;
+        
+        // DOM elements
+        const boardElement = document.getElementById('board');
+        const scoreElement = document.getElementById('score');
+        const levelElement = document.getElementById('level');
+        const gameOverElement = document.getElementById('game-over');
+        const resetButton = document.getElementById('reset-button');
+        const musicButton = document.getElementById('music-button');
+        const musicElement = document.getElementById('tetris-music');
+        
+        // Initialize the game
+        function initGame() {
+            createBoard();
+            resetGame();
+            
+            // Event listeners
+            document.addEventListener('keydown', handleKeyPress);
+            resetButton.addEventListener('click', resetGame);
+            musicButton.addEventListener('click', toggleMusic);
+        }
+        
+        // Create the board
+        function createBoard() {
+            boardElement.innerHTML = '';
+            for (let y = 0; y < BOARD_HEIGHT; y++) {
+                for (let x = 0; x < BOARD_WIDTH; x++) {
+                    const cell = document.createElement('div');
+                    cell.className = 'cell';
+                    cell.dataset.x = x;
+                    cell.dataset.y = y;
+                    boardElement.appendChild(cell);
+                }
+            }
+        }
+        
+        // Create empty board data
+        function createEmptyBoard() {
+            return Array.from({ length: BOARD_HEIGHT }, () => Array(BOARD_WIDTH).fill(0));
+        }
+        
+        // Get random tetromino
+        function randomTetromino() {
+            const keys = Object.keys(TETROMINOS);
+            const randKey = keys[Math.floor(Math.random() * keys.length)];
+            return TETROMINOS[randKey];
+        }
+        
+        // Check for collision
+        function checkCollision(x, y, shape) {
+            for (let row = 0; row < shape.length; row++) {
+                for (let col = 0; col < shape[row].length; col++) {
+                    if (shape[row][col] !== 0) {
+                        const newX = x + col;
+                        const newY = y + row;
+                        if (newX < 0 || newX >= BOARD_WIDTH || newY >= BOARD_HEIGHT || 
+                            (newY >= 0 && board[newY][newX] !== 0)) {
+                            return true;
+                        }
+                    }
+                }
+            }
+            return false;
+        }
+        
+        // Check if move is valid
+        function isValidMove(x, y, shape) {
+            return !checkCollision(x, y, shape);
+        }
+        
+        // Move piece left
+        function moveLeft() {
+            if (currentPiece && isValidMove(currentPiece.x - 1, currentPiece.y, currentPiece.tetromino.shape)) {
+                currentPiece.x -= 1;
+                updateBoard();
+            }
+        }
+        
+        // Move piece right
+        function moveRight() {
+            if (currentPiece && isValidMove(currentPiece.x + 1, currentPiece.y, currentPiece.tetromino.shape)) {
+                currentPiece.x += 1;
+                updateBoard();
+            }
+        }
+        
+        // Move piece down
+        function moveDown() {
+            if (!currentPiece) return;
+            
+            if (isValidMove(currentPiece.x, currentPiece.y + 1, currentPiece.tetromino.shape)) {
+                currentPiece.y += 1;
+                updateBoard();
+            } else {
+                placePiece();
+            }
+        }
+        
+        // Rotate piece
+        function rotate() {
+            if (!currentPiece) return;
+            
+            const rotated = currentPiece.tetromino.shape[0].map((_, i) =>
+                currentPiece.tetromino.shape.map(row => row[i]).reverse()
+            );
+            
+            let newX = currentPiece.x;
+            let newY = currentPiece.y;
+            
+            // Try to rotate, if not possible, try to adjust position
+            if (!isValidMove(newX, newY, rotated)) {
+                // Try to move left
+                if (isValidMove(newX - 1, newY, rotated)) {
+                    newX -= 1;
+                }
+                // Try to move right
+                else if (isValidMove(newX + 1, newY, rotated)) {
+                    newX += 1;
+                }
+                // Try to move up
+                else if (isValidMove(newX, newY - 1, rotated)) {
+                    newY -= 1;
+                }
+                // If still not possible, don't rotate
+                else {
+                    return;
+                }
+            }
+            
+            currentPiece.x = newX;
+            currentPiece.y = newY;
+            currentPiece.tetromino.shape = rotated;
+            
+            updateBoard();
+        }
+        
+        // Place piece on the board
+        function placePiece() {
+            if (!currentPiece) return;
+            
+            currentPiece.tetromino.shape.forEach((row, y) => {
+                row.forEach((value, x) => {
+                    if (value !== 0) {
+                        const boardY = y + currentPiece.y;
+                        const boardX = x + currentPiece.x;
+                        if (boardY >= 0 && boardY < BOARD_HEIGHT && boardX >= 0 && boardX < BOARD_WIDTH) {
+                            board[boardY][boardX] = currentPiece.tetromino.color;
+                        }
+                    }
+                });
+            });
+            
+            clearLines();
+            spawnNewPiece();
+        }
+        
+        // Clear completed lines
+        function clearLines() {
+            completedRows = [];
+            
+            const newBoard = board.filter((row, index) => {
+                if (row.every(cell => cell !== 0)) {
+                    completedRows.push(index);
+                    return false;
+                }
+                return true;
+            });
+            
+            if (completedRows.length > 0) {
+                // Highlight completed rows
+                updateBoard(true);
+                
+                setTimeout(() => {
+                    while (newBoard.length < BOARD_HEIGHT) {
+                        newBoard.unshift(Array(BOARD_WIDTH).fill(0));
+                    }
+                    
+                    board = newBoard;
+                    completedRows = [];
+                    
+                    // Update score
+                    score += completedRows.length * 100;
+                    scoreElement.textContent = `Score: ${score}`;
+                    
+                    // Check for level up
+                    if (Math.floor(score / 500) > level - 1) {
+                        level += 1;
+                        levelElement.textContent = `Level: ${level}`;
+                        dropTime *= SPEED_INCREASE_FACTOR;
+                        
+                        // Reset drop interval with new speed
+                        clearInterval(dropInterval);
+                        if (!gameOver) {
+                            dropInterval = setInterval(moveDown, dropTime);
+                        }
+                    }
+                    
+                    updateBoard();
+                }, 500);
+            }
+        }
+        
+        // Spawn new piece
+        function spawnNewPiece() {
+            const newPiece = {
+                x: Math.floor(BOARD_WIDTH / 2) - 1,
+                y: 0,
+                tetromino: randomTetromino()
+            };
+            
+            if (checkCollision(newPiece.x, newPiece.y, newPiece.tetromino.shape)) {
+                gameOver = true;
+                gameOverElement.style.display = 'block';
+                clearInterval(dropInterval);
+                resetButton.textContent = 'Play Again';
+            } else {
+                currentPiece = newPiece;
+                updateBoard();
+            }
+        }
+        
+        // Update the board display
+        function updateBoard(showCompleted = false) {
+            const cells = document.querySelectorAll('.cell');
+            
+            cells.forEach(cell => {
+                const x = parseInt(cell.dataset.x);
+                const y = parseInt(cell.dataset.y);
+                
+                // Reset cell classes
+                cell.className = 'cell';
+                
+                // Check if cell is part of completed row
+                if (showCompleted && completedRows.includes(y)) {
+                    cell.classList.add('filled');
+                    return;
+                }
+                
+                // Check if cell is part of current piece
+                if (currentPiece && 
+                    y >= currentPiece.y && 
+                    y < currentPiece.y + currentPiece.tetromino.shape.length && 
+                    x >= currentPiece.x && 
+                    x < currentPiece.x + currentPiece.tetromino.shape[0].length) {
+                    
+                    const pieceY = y - currentPiece.y;
+                    const pieceX = x - currentPiece.x;
+                    
+                    if (currentPiece.tetromino.shape[pieceY] && 
+                        currentPiece.tetromino.shape[pieceY][pieceX]) {
+                        cell.classList.add(currentPiece.tetromino.color);
+                    }
+                } 
+                // Check if cell is part of placed pieces
+                else if (board[y] && board[y][x]) {
+                    cell.classList.add(board[y][x]);
+                }
+            });
+        }
+        
+        // Handle key presses
+        function handleKeyPress(e) {
+            if (gameOver) return;
+            
+            switch (e.key) {
+                case 'ArrowLeft':
+                    moveLeft();
+                    break;
+                case 'ArrowRight':
+                    moveRight();
+                    break;
+                case 'ArrowDown':
+                    moveDown();
+                    break;
+                case 'ArrowUp':
+                    rotate();
+                    break;
+                default:
+                    break;
+            }
+        }
+        
+        // Toggle music
+        function toggleMusic() {
+            isMusicPlaying = !isMusicPlaying;
+            
+            if (isMusicPlaying) {
+                musicElement.volume = 0.5;
+                musicElement.play().catch(error => console.error("Audio playback failed:", error));
+                musicButton.innerHTML = `
+                    <svg class="music-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M9 18V5l12-2v13"></path>
+                        <circle cx="6" cy="18" r="3"></circle>
+                        <circle cx="18" cy="16" r="3"></circle>
+                    </svg>
+                    Stop Music
+                `;
+            } else {
+                musicElement.pause();
+                musicButton.innerHTML = `
+                    <svg class="music-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M9 18V5l12-2v13"></path>
+                        <circle cx="6" cy="18" r="3"></circle>
+                        <circle cx="18" cy="16" r="3"></circle>
+                    </svg>
+                    Play Music
+                `;
+            }
+        }
+        
+        // Reset the game
+        function resetGame() {
+            board = createEmptyBoard();
+            currentPiece = null;
+            score = 0;
+            gameOver = false;
+            dropTime = INITIAL_DROP_TIME;
+            level = 1;
+            completedRows = [];
+            
+            scoreElement.textContent = 'Score: 0';
+            levelElement.textContent = 'Level: 1';
+            gameOverElement.style.display = 'none';
+            resetButton.textContent = 'Reset Game';
+            
+            clearInterval(dropInterval);
+            dropInterval = setInterval(moveDown, dropTime);
+            
+            spawnNewPiece();
+            updateBoard();
+        }
+        
+        // Initialize the game when the page loads
+        window.addEventListener('load', initGame);
+    </script>
+</body>
+</html>
